@@ -34,27 +34,26 @@ pub fn multi_producer(n_producers: usize) -> Vec<String> {
     let mut handles = Vec::new();
 
     for id in 0..n_producers {
-        let tx_clone = tx.clone();
-        let handle = thread::spawn(move || {
-            let msg = format!("msg from {}", id);
-            tx_clone.send(msg).unwrap();
+        let tx = tx.clone();
+        let h = thread::spawn(move || {
+            tx.send(format!("msg from {}", id)).unwrap();
         });
-        handles.push(handle);
+        handles.push(h);
     }
 
-    // drop original sender! Critical point.
+    // 销毁原始发送者
     drop(tx);
 
-    // wait all producer threads finish
+    // 等待所有线程发送完毕
     for h in handles {
         h.join().unwrap();
     }
 
-    // collect messages and sort
-    let mut messages: Vec<String> = rx.collect();
-    messages.sort();
-    messages
+    let mut msgs: Vec<String> = rx.collect();
+    msgs.sort();
+    msgs
 }
+
 
 #[cfg(test)]
 mod tests {
