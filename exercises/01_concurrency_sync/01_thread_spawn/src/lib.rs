@@ -50,15 +50,15 @@ use std::time::Duration;
 /// use std::thread;
 ///
 /// fn panic_handling_example() {
-///     let handle = thread::spawn(|| {
-///         // Simulate a panic
-///         panic!("Thread panicked!");
-///     });
+///     let handle = thread::spawn(|| {
+///         // Simulate a panic
+///         panic!("Thread panicked!");
+///     });
 ///
-///     match handle.join() {
-///         Ok(_) => println!("Thread completed successfully."),
-///         Err(e) => println!("Thread panicked: {:?}", e),
-///     }
+///     match handle.join() {
+///         Ok(_) => println!("Thread completed successfully."),
+///         Err(e) => println!("Thread panicked: {:?}", e),
+///     }
 /// }
 /// ```
 ///
@@ -73,17 +73,17 @@ use std::time::Duration;
 /// use std::thread;
 ///
 /// fn named_thread_example() {
-///     let builder = thread::Builder::new()
-///         .name("my-worker".into())
-///         .stack_size(32 * 1024); // 32 KiB
+///     let builder = thread::Builder::new()
+///         .name("my-worker".into())
+///         .stack_size(32 * 1024); // 32 KiB
 ///
-///     let handle = builder.spawn(|| {
-///         println!("Hello from thread: {:?}", thread::current().name());
-///         42
-///     }).unwrap();
+///     let handle = builder.spawn(|| {
+///         println!("Hello from thread: {:?}", thread::current().name());
+///         42
+///     }).unwrap();
 ///
-///     let result = handle.join().unwrap();
-///     println!("Thread returned: {}", result);
+///     let result = handle.join().unwrap();
+///     println!("Thread returned: {}", result);
 /// }
 /// ```
 /// Example: Scoped threads (Rust 1.63+).
@@ -96,17 +96,17 @@ use std::time::Duration;
 /// use std::thread;
 ///
 /// fn scoped_thread_example() {
-///     let a = vec![1, 2, 3];
-///     let b = vec![4, 5, 6];
+///     let a = vec![1, 2, 3];
+///     let b = vec![4, 5, 6];
 ///
-///     let (sum_a, sum_b) = thread::scope(|s| {
-///         let h1 = s.spawn(|| a.iter().sum::<i32>());
-///         let h2 = s.spawn(|| b.iter().sum::<i32>());
-///         (h1.join().unwrap(), h2.join().unwrap())
-///     });
+///     let (sum_a, sum_b) = thread::scope(|s| {
+///         let h1 = s.spawn(|| a.iter().sum::<i32>());
+///         let h2 = s.spawn(|| b.iter().sum::<i32>());
+///         (h1.join().unwrap(), h2.join().unwrap())
+///     });
 ///
-///     // `a` and `b` are still accessible here.
-///     println!("sum_a = {}, sum_b = {}", sum_a, sum_b);
+///     // `a` and `b` are still accessible here.
+///     println!("sum_a = {}, sum_b = {}", sum_a, sum_b);
 /// }
 /// ```
 /// Example: Thread‑local storage.
@@ -118,24 +118,24 @@ use std::time::Duration;
 /// use std::thread;
 ///
 /// thread_local! {
-///     static THREAD_ID: RefCell<usize> = RefCell::new(0);
+///     static THREAD_ID: RefCell<usize> = RefCell::new(0);
 /// }
 ///
 /// fn thread_local_example() {
-///     THREAD_ID.with(|id| {
-///         *id.borrow_mut() = 1;
-///     });
+///     THREAD_ID.with(|id| {
+///         *id.borrow_mut() = 1;
+///     });
 ///
-///     let handle = thread::spawn(|| {
-///         THREAD_ID.with(|id| {
-///             *id.borrow_mut() = 2;
-///         });
-///         THREAD_ID.with(|id| println!("Thread local value: {}", *id.borrow()));
-///     });
+///     let handle = thread::spawn(|| {
+///         THREAD_ID.with(|id| {
+///             *id.borrow_mut() = 2;
+///         });
+///         THREAD_ID.with(|id| println!("Thread local value: {}", *id.borrow()));
+///     });
 ///
-///     handle.join().unwrap();
+///     handle.join().unwrap();
 ///
-///     THREAD_ID.with(|id| println!("Main thread value: {}", *id.borrow()));
+///     THREAD_ID.with(|id| println!("Main thread value: {}", *id.borrow()));
 /// }
 /// ```
 // ============================================================================
@@ -161,6 +161,7 @@ pub fn parallel_sum(a: Vec<i32>, b: Vec<i32>) -> (i32, i32) {
     let h2 = thread::spawn(move || b.iter().sum::<i32>());
     (h1.join().unwrap(), h2.join().unwrap())
 }
+
 // ============================================================================
 // Advanced Exercise Functions
 // ============================================================================
@@ -172,11 +173,13 @@ pub fn parallel_sum(a: Vec<i32>, b: Vec<i32>) -> (i32, i32) {
 /// Hint: `thread::sleep` causes the current thread to block; it does not affect other threads.
 #[allow(unused_variables)]
 pub fn named_sleeper(value: i32, ms: u64) -> i32 {
-    let builder = thread::Builder::new().name("sleeper".into());
-    let handle = builder.spawn(move || {
-        thread::sleep(Duration::from_millis(ms));
-        value
-    }).unwrap();
+    let handle = thread::Builder::new()
+        .name("sleeper".to_string())
+        .spawn(move || {
+            thread::sleep(Duration::from_millis(ms));
+            value
+        })
+        .unwrap();
     handle.join().unwrap()
 }
 
