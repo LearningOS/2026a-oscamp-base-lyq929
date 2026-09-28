@@ -2,8 +2,8 @@
   "schema": 1,
   "courseId": 2074,
   "repository": "LearningOS/2026a-oscamp-base-lyq929",
-  "commit": "9000583dd31b1c5b4a7a21400a0b5abd1a5b9f4c",
-  "score": 35,
+  "commit": "70e414b5d8509d062cf0ebcfcf267adcb63c5baa",
+  "score": 39,
   "totalScore": 100,
   "exercises": [
     {
@@ -37,9 +37,9 @@
     {
       "name": "mem_primitives",
       "max": 4,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 4,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "bump_allocator",
@@ -176,9 +176,9 @@
     }
   ],
   "student": "lyq929",
-  "runId": "36459053360",
+  "runId": "36459588260",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
