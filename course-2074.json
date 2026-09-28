@@ -2,16 +2,16 @@
   "schema": 1,
   "courseId": 2074,
   "repository": "LearningOS/2026a-oscamp-base-lyq929",
-  "commit": "6bb4ab2b1a9fe224b47dbfe488dd3229cf54c2d0",
-  "score": 0,
+  "commit": "31047903d6bb0de8f5ea3cee9084105410b43d30",
+  "score": 3,
   "totalScore": 100,
   "exercises": [
     {
       "name": "thread_spawn",
       "max": 3,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 3,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "mutex_counter",
@@ -176,9 +176,9 @@
     }
   ],
   "student": "lyq929",
-  "runId": "36450442756",
+  "runId": "36451576379",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
