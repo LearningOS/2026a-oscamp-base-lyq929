@@ -14,6 +14,7 @@
 // Force no_std in production; allow std in tests (cargo test framework requires it)
 #![cfg_attr(not(test), no_std)]
 #![allow(unused_variables)]
+use core::ptr;
 
 /// Copy `n` bytes from `src` to `dst`.
 ///
@@ -59,8 +60,9 @@ pub unsafe extern "C" fn my_memmove(dst: *mut u8, src: *const u8, n: usize) -> *
     if n == 0 {
         return dst;
     }
-    // fix: cast *mut u8 to *const u8 for pointer comparison
-    if dst as *const u8 < src {
+    // fix: use ptr::lt for pointer comparison
+    let dst_const = dst as *const u8;
+    if dst_const.lt(&src) {
         // No overlap hazard: forward copy (same as memcpy)
         let mut i = 0;
         while i < n {
