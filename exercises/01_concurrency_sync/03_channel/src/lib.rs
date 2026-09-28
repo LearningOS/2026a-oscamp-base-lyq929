@@ -13,13 +13,15 @@ use std::thread;
 /// The main thread receives all messages and returns them.
 pub fn simple_send_recv(items: Vec<String>) -> Vec<String> {
     let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
+    let handle = thread::spawn(move || {
         for item in items {
             if tx.send(item).is_err() {
                 return;
             }
         }
     });
+    // 等待子线程发送完毕
+    let _ = handle.join();
     rx.collect()
 }
 
@@ -30,7 +32,6 @@ pub fn simple_send_recv(items: Vec<String>) -> Vec<String> {
 pub fn multi_producer(n_producers: usize) -> Vec<String> {
     let (tx, rx) = mpsc::channel();
     let mut handles = Vec::new();
-
     for id in 0..n_producers {
         let tx_clone = tx.clone();
         let handle = thread::spawn(move || {
@@ -39,15 +40,12 @@ pub fn multi_producer(n_producers: usize) -> Vec<String> {
         });
         handles.push(handle);
     }
-
     // Drop original sender
     drop(tx);
-
     // Wait all threads finish sending
     for handle in handles {
         let _ = handle.join();
     }
-
     let mut messages = Vec::new();
     while let Ok(msg) = rx.recv() {
         messages.push(msg);
@@ -55,7 +53,6 @@ pub fn multi_producer(n_producers: usize) -> Vec<String> {
     messages.sort();
     messages
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
