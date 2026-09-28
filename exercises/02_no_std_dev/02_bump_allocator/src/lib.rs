@@ -9,10 +9,10 @@
 //! It does not support freeing individual objects (`dealloc` is a no-op).
 //!
 //! ```text
-//! heap_start                              heap_end
+//! heap_start                                 heap_end
 //! |----[allocated]----[allocated]----| next |---[free]---|
-//!                                        ^
-//!                                    next allocation starts here
+//!                                     ^
+//!                                next allocation starts here
 //! ```
 //!
 //! ## Task
@@ -28,19 +28,15 @@
 //! - `core::alloc::{GlobalAlloc, Layout}`
 //! - Memory alignment calculation
 //! - `AtomicUsize` and `compare_exchange` (CAS loop)
-
 #![cfg_attr(not(test), no_std)]
-
 use core::alloc::{GlobalAlloc, Layout};
 use core::ptr::null_mut;
 use core::sync::atomic::{AtomicUsize, Ordering};
-
 pub struct BumpAllocator {
     heap_start: usize,
     heap_end: usize,
     next: AtomicUsize,
 }
-
 impl BumpAllocator {
     /// Create a new BumpAllocator.
     ///
@@ -54,50 +50,62 @@ impl BumpAllocator {
             next: AtomicUsize::new(heap_start),
         }
     }
-
     /// Reset the allocator (free all allocated memory).
     pub fn reset(&self) {
         self.next.store(self.heap_start, Ordering::SeqCst);
     }
 }
-
 unsafe impl GlobalAlloc for BumpAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        // TODO: Implement bump allocation
-        //
-        // Steps:
-        // 1. Load current next (use Ordering::SeqCst)
-        // 2. Align next up to layout.align()
-        //    Hint: align_up(addr, align) = (addr + align - 1) & !(align - 1)
-        // 3. Compute allocation end = aligned + layout.size()
-        // 4. If end > heap_end, return null_mut()
-        // 5. Atomically update next to end using compare_exchange
-        //    (if CAS fails, another thread raced — retry in a loop)
-        // 6. Return the aligned address as a pointer
-        todo!()
-    }
+        let align = layout.align();
+        let size = layout.size();
 
+        loop {
+            // Step1: load current next pointer
+            let current_next = self.next.load(Ordering::SeqCst);
+            // Step2: align up
+            let aligned = (current_next + align - 1) & !(align - 1);
+            // Step3: compute end address
+            let alloc_end = aligned + size;
+            // Step4: out of heap space
+            if alloc_end > self.heap_end {
+                return null_mut();
+            }
+            // Step5: CAS, try to update next to alloc_end
+            match self.next.compare_exchange(
+                current_next,
+                alloc_end,
+                Ordering::SeqCst,
+                Ordering::SeqCst
+            ) {
+                Ok(_) => {
+                    // success, return aligned address as pointer
+                    return aligned as *mut u8;
+                }
+                Err(_) => {
+                    // CAS failed, another thread allocated, retry loop
+                    continue;
+                }
+            }
+        }
+    }
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
         // Bump allocator does not reclaim individual objects — leave empty
     }
 }
-
 // ============================================================
 // Tests
 // ============================================================
 #[cfg(test)]
 mod tests {
     use super::*;
-
     const HEAP_SIZE: usize = 4096;
-
     fn make_allocator() -> (BumpAllocator, Vec<u8>) {
         let mut heap = vec![0u8; HEAP_SIZE];
         let start = heap.as_mut_ptr() as usize;
         let alloc = unsafe { BumpAllocator::new(start, start + HEAP_SIZE) };
         (alloc, heap)
     }
-
     #[test]
     fn test_alloc_basic() {
         let (alloc, _heap) = make_allocator();
@@ -105,7 +113,6 @@ mod tests {
         let ptr = unsafe { alloc.alloc(layout) };
         assert!(!ptr.is_null(), "allocation should succeed");
     }
-
     #[test]
     fn test_alloc_alignment() {
         let (alloc, _heap) = make_allocator();
@@ -120,7 +127,6 @@ mod tests {
             );
         }
     }
-
     #[test]
     fn test_alloc_no_overlap() {
         let (alloc, _heap) = make_allocator();
@@ -132,7 +138,6 @@ mod tests {
             "two allocations must not overlap"
         );
     }
-
     #[test]
     fn test_alloc_oom() {
         let (alloc, _heap) = make_allocator();
@@ -140,7 +145,6 @@ mod tests {
         let ptr = unsafe { alloc.alloc(layout) };
         assert!(ptr.is_null(), "should return null when exceeding heap");
     }
-
     #[test]
     fn test_alloc_fill_heap() {
         let (alloc, _heap) = make_allocator();
@@ -152,7 +156,6 @@ mod tests {
         let ptr = unsafe { alloc.alloc(layout) };
         assert!(ptr.is_null(), "should return null when heap is full");
     }
-
     #[test]
     fn test_reset() {
         let (alloc, _heap) = make_allocator();
