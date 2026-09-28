@@ -13,13 +13,13 @@ use std::thread;
 /// The main thread receives all messages and returns them.
 pub fn simple_send_recv(items: Vec<String>) -> Vec<String> {
     let (tx, rx) = mpsc::channel();
-
     thread::spawn(move || {
         for item in items {
-            tx.send(item).unwrap();
+            if tx.send(item).is_err() {
+                return;
+            }
         }
     });
-
     rx.collect()
 }
 
@@ -35,7 +35,7 @@ pub fn multi_producer(n_producers: usize) -> Vec<String> {
         let tx_clone = tx.clone();
         let handle = thread::spawn(move || {
             let msg = format!("msg from {}", id);
-            tx_clone.send(msg).unwrap();
+            let _ = tx_clone.send(msg);
         });
         handles.push(handle);
     }
@@ -45,7 +45,7 @@ pub fn multi_producer(n_producers: usize) -> Vec<String> {
 
     // Wait all threads finish sending
     for handle in handles {
-        handle.join().unwrap();
+        let _ = handle.join();
     }
 
     let mut messages = Vec::new();
