@@ -2,8 +2,8 @@
   "schema": 1,
   "courseId": 2074,
   "repository": "LearningOS/2026a-oscamp-base-lyq929",
-  "commit": "ba1ec3a83e18ed93636090fbf21e4b11064fd48a",
-  "score": 11,
+  "commit": "95ed04c0719eda3f2cfa139f445a4b35dc99b0f7",
+  "score": 15,
   "totalScore": 100,
   "exercises": [
     {
@@ -23,9 +23,9 @@
     {
       "name": "channel",
       "max": 4,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 4,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "process_pipe",
@@ -176,9 +176,9 @@
     }
   ],
   "student": "lyq929",
-  "runId": "36456225120",
+  "runId": "36456726441",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
