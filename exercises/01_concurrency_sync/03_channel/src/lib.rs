@@ -22,7 +22,7 @@ pub fn simple_send_recv(items: Vec<String>) -> Vec<String> {
     });
     // 等待子线程发送完毕
     let _ = handle.join();
-    rx.collect()
+    rx.into_iter().collect()
 }
 
 /// Create `n_producers` producer threads, each sending a message in format `"msg from {id}"`.
