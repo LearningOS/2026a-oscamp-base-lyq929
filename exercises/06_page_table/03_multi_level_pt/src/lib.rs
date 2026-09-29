@@ -12,10 +12,10 @@
 //!
 //! ## SV39 虚拟地址布局
 //! ```text
-//! 38        30 29       21 20       12 11        0
+//! 38      30 29      21 20      12 11       0
 //! ┌──────────┬───────────┬───────────┬───────────┐
-//! │ VPN[2]   │  VPN[1]   │  VPN[0]   │  offset   │
-//! │  9 bits  │  9 bits   │  9 bits   │  12 bits  │
+//! │ VPN[2]   │  VPN[1]   │  VPN[0]   │  offset   │
+//! │  9 bits  │  9 bits   │  9 bits   │  12 bits  │
 //! └──────────┴───────────┴───────────┴───────────┘
 //! ```
 use std::collections::HashMap;
@@ -24,10 +24,10 @@ pub const PAGE_SIZE: usize = 4096;
 /// 每级页表有 512 个条目 (2^9)
 pub const PT_ENTRIES: usize = 512;
 /// PTE 标志位
-pub const PTE_V: u64 = 1 << 0;
-pub const PTE_R: u64 = 1 << 1;
-pub const PTE_W: u64 = 1 << 2;
-pub const PTE_X: u64 = 1 << 3;
+pub const PTE_V: u64 = 1 << 0; // Valid
+pub const PTE_R: u64 = 1 << 1; // Readable
+pub const PTE_W: u64 = 1 << 2; // Writable
+pub const PTE_X: u64 = 1 << 3; // Executable
 /// PPN 在 PTE 中的偏移
 const PPN_SHIFT: u32 = 10;
 /// 页表节点：一个包含 512 个条目的数组
@@ -84,9 +84,9 @@ impl Sv39PageTable {
     }
     /// 从 39 位虚拟地址中提取第 `level` 级的 VPN。
     ///
-    /// - level=2: 取 bits [38:30]
-    /// - level=1: 取 bits [29:21]
-    /// - level=0: 取 bits [20:12]
+    /// - `level=2`: 取 bits [38:30]
+    /// - `level=1`: 取 bits [29:21]
+    /// - `level=0`: 取 bits [20:12]
     ///
     /// 提示：右移 (12 + level * 9) 位，然后与 0x1FF 做掩码。
     pub fn extract_vpn(va: u64, level: usize) -> usize {
@@ -104,20 +104,22 @@ impl Sv39PageTable {
         let va_page = va & !(PAGE_SIZE as u64 - 1);
         let pa_page = pa & !(PAGE_SIZE as u64 - 1);
         let target_ppn = pa_page >> 12;
-
         let mut curr_ppn = self.root_ppn;
         // 遍历 level 2, level1
         for level in [2, 1] {
             let vpn = Self::extract_vpn(va_page, level);
-            let node = self.nodes.get_mut(&curr_ppn).unwrap();
-            let pte = &mut node.entries[vpn];
-            if (*pte & PTE_V) == 0 {
-                // 分配子页表节点，写入PTE
+            // 先只读读取PTE，不持有可变借用
+            let pte = self.nodes.get(&curr_ppn).unwrap().entries[vpn];
+            if (pte & PTE_V) == 0 {
+                // 先分配，此时没有活跃可变借用
                 let child_ppn = self.alloc_node();
-                *pte = (child_ppn << PPN_SHIFT) | PTE_V;
+                // 获取可变引用写入PTE
+                let node = self.nodes.get_mut(&curr_ppn).unwrap();
+                node.entries[vpn] = (child_ppn << PPN_SHIFT) | PTE_V;
             }
-            // 取出子节点PPN，进入下一层
-            curr_ppn = (*pte >> PPN_SHIFT);
+            // 重新读取PTE拿到子PPN
+            let pte = self.nodes.get(&curr_ppn).unwrap().entries[vpn];
+            curr_ppn = pte >> PPN_SHIFT;
         }
         // level 0，写入叶子PTE
         let vpn0 = Self::extract_vpn(va_page, 0);
@@ -129,10 +131,10 @@ impl Sv39PageTable {
     /// 步骤：
     /// 1. 从根页表（root_ppn）开始
     /// 2. 对每一级（2, 1, 0）：
-    ///    a. 用 VPN[level] 索引当前页表节点
-    ///    b. 如果 PTE 无效（!PTE_V），返回 PageFault
-    ///    c. 如果 PTE 是叶节点（R|W|X 有任一置位），提取 PPN 计算物理地址
-    ///    d. 否则用 PTE 中的 PPN 进入下一级页表
+    ///    a. 用 VPN[level] 索引当前页表节点
+    ///    b. 如果 PTE 无效（!PTE_V），返回 PageFault
+    ///    c. 如果 PTE 是叶节点（R|W|X 有任一置位），提取 PPN 计算物理地址
+    ///    d. 否则用 PTE 中的 PPN 进入下一级页表
     /// 3. level 0 的 PTE 必须是叶节点
     pub fn translate(&self, va: u64) -> TranslateResult {
         let offset = va & 0xFFF;
@@ -171,18 +173,19 @@ impl Sv39PageTable {
         assert_eq!(va % mega_size, 0, "va must be 2MB-aligned");
         assert_eq!(pa % mega_size, 0, "pa must be 2MB-aligned");
         let target_ppn = pa >> 12;
-
         let mut curr_ppn = self.root_ppn;
         // 只遍历 level 2
         let level2 = 2;
         let vpn2 = Self::extract_vpn(va, level2);
-        let node_root = self.nodes.get_mut(&curr_ppn).unwrap();
-        let pte = &mut node_root.entries[vpn2];
-        if (*pte & PTE_V) == 0 {
+        // 先读PTE
+        let pte = self.nodes.get(&curr_ppn).unwrap().entries[vpn2];
+        if (pte & PTE_V) == 0 {
             let child_ppn = self.alloc_node();
-            *pte = (child_ppn << PPN_SHIFT) | PTE_V;
+            let node_root = self.nodes.get_mut(&curr_ppn).unwrap();
+            node_root.entries[vpn2] = (child_ppn << PPN_SHIFT) | PTE_V;
         }
-        curr_ppn = *pte >> PPN_SHIFT;
+        let pte = self.nodes.get(&curr_ppn).unwrap().entries[vpn2];
+        curr_ppn = pte >> PPN_SHIFT;
 
         // level1 写入叶子PTE（大页）
         let vpn1 = Self::extract_vpn(va, 1);
