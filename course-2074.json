@@ -2,7 +2,7 @@
   "schema": 1,
   "courseId": 2074,
   "repository": "LearningOS/2026a-oscamp-base-lyq929",
-  "commit": "2bb46f839386d62ffaa1d649f40c835eeeb54339",
+  "commit": "938b3f5d0d4eb062f374819f3fda456719cfd60c",
   "score": 60,
   "totalScore": 100,
   "exercises": [
@@ -176,9 +176,9 @@
     }
   ],
   "student": "lyq929",
-  "runId": "36586081368",
+  "runId": "36586703738",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
