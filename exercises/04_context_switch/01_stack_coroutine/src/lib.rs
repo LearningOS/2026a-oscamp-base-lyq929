@@ -13,7 +13,6 @@
 //! - Callee-saved: `sp`, `ra`, `s0`–`s11`. The `ret` instruction is `jalr zero, 0(ra)`.
 //! - First and second arguments: `a0` (old context), `a1` (new context).
 #![cfg(target_arch = "riscv64")]
-
 /// Saved register state for one task (riscv64). Layout must match the offsets used in the asm below:
 /// `sp` at 0, `ra` at 8, then `s0`–`s11` at 16, 24, … 104.
 #[repr(C)]
@@ -63,7 +62,6 @@ impl TaskContext {
         self.ra = entry as u64;
     }
 }
-
 /// Switch from `old` to `new` context: save current callee-saved regs into `old`, load from `new`, then `ret` (jumps to `new.ra`).
 ///
 /// In asm: store `sp`, `ra`, `s0`–`s11` to `[a0]` (old), load from `[a1]` (new), zero `a0`/`a1` so we do not leak pointers into the new context, then `ret`.
@@ -108,10 +106,8 @@ pub unsafe extern "C" fn switch_context(old: &mut TaskContext, new: &TaskContext
         "mv a1, zero",
         // ret = jalr zero,0(ra)
         "ret",
-        options(noreturn),
     );
 }
-
 const STACK_SIZE: usize = 1024 * 64;
 /// Allocate a stack for a coroutine. Returns `(buffer, stack_top)` where `stack_top` is the high address
 /// (stack grows down). The buffer must be kept alive for the lifetime of the context using this stack.
@@ -123,27 +119,23 @@ pub fn alloc_stack() -> (Vec<u8>, usize) {
     let stack_top = stack_top & !(0xf);
     (buf, stack_top)
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
     static COUNTER: AtomicU32 = AtomicU32::new(0);
-
     extern "C" fn task_entry() {
         COUNTER.store(42, Ordering::SeqCst);
         loop {
             std::hint::spin_loop();
         }
     }
-
     #[test]
     fn test_alloc_stack() {
         let (buf, top) = alloc_stack();
         assert_eq!(top, buf.as_ptr() as usize + STACK_SIZE);
         assert!(top % 16 == 0);
     }
-
     #[test]
     fn test_context_init() {
         let (buf, top) = alloc_stack();
@@ -154,25 +146,21 @@ mod tests {
         assert_eq!(ctx.ra, entry as u64);
         assert!(ctx.sp != 0);
     }
-
     #[test]
     fn test_switch_to_task() {
         COUNTER.store(0, Ordering::SeqCst);
         static mut MAIN_CTX_PTR: *mut TaskContext = std::ptr::null_mut();
         static mut TASK_CTX_PTR: *mut TaskContext = std::ptr::null_mut();
-
         extern "C" fn cooperative_task() {
             COUNTER.store(99, Ordering::SeqCst);
             unsafe {
                 switch_context(&mut *TASK_CTX_PTR, &*MAIN_CTX_PTR);
             }
         }
-
         let (_stack_buf, stack_top) = alloc_stack();
         let mut main_ctx = TaskContext::empty();
         let mut task_ctx = TaskContext::empty();
         task_ctx.init(stack_top, cooperative_task as *const () as usize);
-
         unsafe {
             MAIN_CTX_PTR = &mut main_ctx;
             TASK_CTX_PTR = &mut task_ctx;

@@ -190,11 +190,12 @@ impl Scheduler {
                 CURRENT_THREAD_ENTRY = Some(entry_fn);
             }
         }
-        // ========= FIX: Use raw pointers to avoid borrow checker conflict =========
+        // Get raw pointers to avoid borrow checker conflict
         let old_ctx_ptr = &mut self.threads[old_idx].ctx as *mut TaskContext;
         let new_ctx_ptr = &self.threads[next_idx].ctx as *const TaskContext;
         unsafe {
-            switch_context(old_ctx_ptr, new_ctx_ptr);
+            // 核心修复：解引用裸指针，转换成引用传给switch_context
+            switch_context(&mut *old_ctx_ptr, &*new_ctx_ptr);
         }
     }
 }
