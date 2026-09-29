@@ -2,8 +2,8 @@
   "schema": 1,
   "courseId": 2074,
   "repository": "LearningOS/2026a-oscamp-base-lyq929",
-  "commit": "73d47c13d78b2e8f0181649926e5089fc514e585",
-  "score": 96,
+  "commit": "ae0d9bd828f7f505ffb15cab00c7d2e341c9dfab",
+  "score": 100,
   "totalScore": 100,
   "exercises": [
     {
@@ -163,9 +163,9 @@
     {
       "name": "multi_level_pt",
       "max": 4,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 4,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "tlb_sim",
@@ -176,9 +176,9 @@
     }
   ],
   "student": "lyq929",
-  "runId": "36596970331",
+  "runId": "36597555047",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
