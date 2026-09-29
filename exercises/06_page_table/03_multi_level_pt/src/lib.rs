@@ -1,23 +1,4 @@
 //! # SV39 三级页表
-//!
-//! 本练习模拟 RISC-V SV39 三级页表的构造和地址翻译。
-//! 注意，实际上的三级页表实现并非如本练习中使用 HashMap 模拟，本练习仅作为模拟帮助学习。
-//! 你需要实现页表的创建、映射和地址翻译（页表遍历）。
-//!
-//! ## 知识点
-//! - SV39：39 位虚拟地址，三级页表
-//! - VPN 拆分：VPN[2] (9bit) | VPN[1] (9bit) | VPN[0] (9bit)
-//! - 页表遍历（page table walk）逐级查找
-//! - 大页（2MB superpage）映射
-//!
-//! ## SV39 虚拟地址布局
-//! ```text
-//! 38      30 29      21 20      12 11       0
-//! ┌──────────┬───────────┬───────────┬───────────┐
-//! │ VPN[2]   │  VPN[1]   │  VPN[0]   │  offset   │
-//! │  9 bits  │  9 bits   │  9 bits   │  12 bits  │
-//! └──────────┴───────────┴───────────┴───────────┘
-//! ```
 use std::collections::HashMap;
 /// 页大小 4KB
 pub const PAGE_SIZE: usize = 4096;
@@ -48,9 +29,6 @@ impl Default for PageTableNode {
     }
 }
 /// 模拟的三级页表。
-///
-/// 使用 HashMap<u64, PageTableNode> 模拟物理内存中的页表页。
-/// `root_ppn` 是根页表所在的物理页号。
 pub struct Sv39PageTable {
     /// 物理页号 -> 页表节点
     nodes: HashMap<u64, PageTableNode>,
@@ -87,18 +65,11 @@ impl Sv39PageTable {
     /// - `level=2`: 取 bits [38:30]
     /// - `level=1`: 取 bits [29:21]
     /// - `level=0`: 取 bits [20:12]
-    ///
-    /// 提示：右移 (12 + level * 9) 位，然后与 0x1FF 做掩码。
     pub fn extract_vpn(va: u64, level: usize) -> usize {
         let shift = 12 + level * 9;
         ((va >> shift) & 0x1FF) as usize
     }
     /// 建立从虚拟页到物理页的映射（4KB 页）。
-    ///
-    /// 参数：
-    /// - `va`: 虚拟地址（会自动对齐到页边界）
-    /// - `pa`: 物理地址（会自动对齐到页边界）
-    /// - `flags`: 标志位（如 PTE_V | PTE_R | PTE_W）
     pub fn map_page(&mut self, va: u64, pa: u64, flags: u64) {
         // 对齐到4KB页边界
         let va_page = va & !(PAGE_SIZE as u64 - 1);
@@ -108,16 +79,12 @@ impl Sv39PageTable {
         // 遍历 level 2, level1
         for level in [2, 1] {
             let vpn = Self::extract_vpn(va_page, level);
-            // 先只读读取PTE，不持有可变借用
             let pte = self.nodes.get(&curr_ppn).unwrap().entries[vpn];
             if (pte & PTE_V) == 0 {
-                // 先分配，此时没有活跃可变借用
                 let child_ppn = self.alloc_node();
-                // 获取可变引用写入PTE
                 let node = self.nodes.get_mut(&curr_ppn).unwrap();
                 node.entries[vpn] = (child_ppn << PPN_SHIFT) | PTE_V;
             }
-            // 重新读取PTE拿到子PPN
             let pte = self.nodes.get(&curr_ppn).unwrap().entries[vpn];
             curr_ppn = pte >> PPN_SHIFT;
         }
@@ -127,15 +94,6 @@ impl Sv39PageTable {
         node0.entries[vpn0] = (target_ppn << PPN_SHIFT) | flags;
     }
     /// 遍历三级页表，将虚拟地址翻译为物理地址。
-    ///
-    /// 步骤：
-    /// 1. 从根页表（root_ppn）开始
-    /// 2. 对每一级（2, 1, 0）：
-    ///    a. 用 VPN[level] 索引当前页表节点
-    ///    b. 如果 PTE 无效（!PTE_V），返回 PageFault
-    ///    c. 如果 PTE 是叶节点（R|W|X 有任一置位），提取 PPN 计算物理地址
-    ///    d. 否则用 PTE 中的 PPN 进入下一级页表
-    /// 3. level 0 的 PTE 必须是叶节点
     pub fn translate(&self, va: u64) -> TranslateResult {
         let mut curr_ppn = self.root_ppn;
         let levels = [2, 1, 0];
@@ -155,15 +113,15 @@ impl Sv39PageTable {
                 let ppn = pte >> PPN_SHIFT;
                 let pa = match level {
                     2 => {
-                        // Level2 1GB大页: ppn << 30 | va & 0x3FFFFFFF
-                        (ppn << 30) | (va & ((1u64 << 30) - 1))
+                        // Level2 1GB大页，保留va低30位
+                        (ppn << 12) | (va & ((1u64 << 30) - 1))
                     }
                     1 => {
-                        // Level1 2MB大页: ppn << 21 | va & 0x1FFFFF
-                        (ppn << 21) | (va & ((1u64 << 21) - 1))
+                        // Level1 2MB大页，保留va低21位
+                        (ppn << 12) | (va & ((1u64 << 21) - 1))
                     }
                     0 => {
-                        // Level0 4KB页: ppn <<12 | offset
+                        // Level0 4KB页，保留va低12位offset
                         (ppn << 12) | (va & 0xFFF)
                     }
                     _ => unreachable!(),
@@ -173,14 +131,9 @@ impl Sv39PageTable {
             // 非叶子，取下一级页表PPN
             curr_ppn = pte >> PPN_SHIFT;
         }
-        // 循环结束代表走到level0，level0必须是叶子，理论不会到这里
         TranslateResult::PageFault
     }
     /// 建立大页映射（2MB superpage，在 level 1 设叶子 PTE）。
-    ///
-    /// 2MB = 512 × 4KB，对齐要求：va 和 pa 都必须 2MB 对齐。
-    ///
-    /// 与 map_page 类似，但只遍历到 level 1 就写入叶子 PTE。
     pub fn map_superpage(&mut self, va: u64, pa: u64, flags: u64) {
         let mega_size: u64 = (PAGE_SIZE * PT_ENTRIES) as u64; // 2MB
         assert_eq!(va % mega_size, 0, "va must be 2MB-aligned");
@@ -190,7 +143,6 @@ impl Sv39PageTable {
         // 只遍历 level 2
         let level2 = 2;
         let vpn2 = Self::extract_vpn(va, level2);
-        // 先读PTE
         let pte = self.nodes.get(&curr_ppn).unwrap().entries[vpn2];
         if (pte & PTE_V) == 0 {
             let child_ppn = self.alloc_node();
@@ -215,10 +167,6 @@ mod tests {
     use super::*;
     #[test]
     fn test_extract_vpn() {
-        // VA = 0x0000_003F_FFFF_F000 (最大的 39 位地址的页边界)
-        // VPN[2] = 0xFF (bits 38:30)
-        // VPN[1] = 0x1FF (bits 29:21)
-        // VPN[0] = 0x1FF (bits 20:12)
         let va: u64 = 0x7FFFFFF000;
         assert_eq!(Sv39PageTable::extract_vpn(va, 2), 0x1FF);
         assert_eq!(Sv39PageTable::extract_vpn(va, 1), 0x1FF);
@@ -226,8 +174,6 @@ mod tests {
     }
     #[test]
     fn test_extract_vpn_simple() {
-        // VA = 0x00000000 + page 1 = 0x1000
-        // VPN[2] = 0, VPN[1] = 0, VPN[0] = 1
         let va: u64 = 0x1000;
         assert_eq!(Sv39PageTable::extract_vpn(va, 2), 0);
         assert_eq!(Sv39PageTable::extract_vpn(va, 1), 0);
@@ -235,7 +181,6 @@ mod tests {
     }
     #[test]
     fn test_extract_vpn_level2() {
-        // VPN[2] = 1 means bit 30 set -> VA >= 0x40000000
         let va: u64 = 0x40000000;
         assert_eq!(Sv39PageTable::extract_vpn(va, 2), 1);
         assert_eq!(Sv39PageTable::extract_vpn(va, 1), 0);
@@ -244,7 +189,6 @@ mod tests {
     #[test]
     fn test_map_and_translate_single() {
         let mut pt = Sv39PageTable::new();
-        // 映射：VA 0x1000 -> PA 0x80001000
         pt.map_page(0x1000, 0x80001000, PTE_V | PTE_R);
         let result = pt.translate(0x1000);
         assert_eq!(result, TranslateResult::Ok(0x80001000));
@@ -253,7 +197,6 @@ mod tests {
     fn test_translate_with_offset() {
         let mut pt = Sv39PageTable::new();
         pt.map_page(0x2000, 0x90000000, PTE_V | PTE_R | PTE_W);
-        // 访问 VA 0x2ABC -> PA 应为 0x90000ABC
         let result = pt.translate(0x2ABC);
         assert_eq!(result, TranslateResult::Ok(0x90000ABC));
     }
@@ -283,9 +226,7 @@ mod tests {
     #[test]
     fn test_superpage_mapping() {
         let mut pt = Sv39PageTable::new();
-        // 2MB 大页映射：VA 0x200000 -> PA 0x80200000
         pt.map_superpage(0x200000, 0x80200000, PTE_V | PTE_R | PTE_W);
-        // 大页内不同偏移都应命中
         assert_eq!(pt.translate(0x200000), TranslateResult::Ok(0x80200000));
         assert_eq!(pt.translate(0x200ABC), TranslateResult::Ok(0x80200ABC));
         assert_eq!(pt.translate(0x2FF000), TranslateResult::Ok(0x802FF000));
@@ -293,9 +234,7 @@ mod tests {
     #[test]
     fn test_superpage_and_normal_coexist() {
         let mut pt = Sv39PageTable::new();
-        // 大页映射在第一个 2MB 区域
         pt.map_superpage(0x0, 0x80000000, PTE_V | PTE_R);
-        // 普通页在不同的 VPN[2] 区域
         pt.map_page(0x40000000, 0x90001000, PTE_V | PTE_R);
         assert_eq!(pt.translate(0x100), TranslateResult::Ok(0x80000100));
         assert_eq!(pt.translate(0x40000000), TranslateResult::Ok(0x90001000));
