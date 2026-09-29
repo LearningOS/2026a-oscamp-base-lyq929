@@ -14,7 +14,6 @@
 //! The scheduler round-robins among ready threads. User entry is wrapped by `thread_wrapper`, which
 //! calls the entry then marks the thread `Finished` and switches back.
 #![cfg(target_arch = "riscv64")]
-#![feature(naked_functions)]
 use core::arch::naked_asm;
 /// Per-thread stack size. Slightly larger to avoid overflow under QEMU / test harness.
 const STACK_SIZE: usize = 1024 * 128;
@@ -125,15 +124,13 @@ impl Scheduler {
     ///    `sp` must be 16-byte aligned (e.g. `(stack_top - 16) & !15` to leave headroom).
     /// 3. Push a `GreenThread` with this context, state `Ready`, and `entry` stored for the wrapper to call.
     pub fn spawn(&mut self, entry: extern "C" fn()) {
-        let mut stack_buf = vec![0u8; STACK_SIZE];
+        let stack_buf = vec![0u8; STACK_SIZE];
         let stack_top = stack_buf.as_ptr() as usize + STACK_SIZE;
         // subtract 16 for stack headroom and align to 16 bytes
         let sp = (stack_top - 16) & !15;
-
         let mut ctx = TaskContext::default();
         ctx.sp = sp as u64;
         ctx.ra = thread_wrapper as usize as u64;
-
         let new_thread = GreenThread {
             ctx,
             state: ThreadState::Ready,
@@ -142,7 +139,6 @@ impl Scheduler {
         };
         self.threads.push(new_thread);
     }
-
     /// Run the scheduler until all threads (except the main one) are `Finished`.
     ///
     /// 1. Set the global `SCHEDULER` pointer to `self` so that `yield_now` and `thread_finished` can call back.
@@ -166,7 +162,6 @@ impl Scheduler {
             SCHEDULER = std::ptr::null_mut();
         }
     }
-
     /// Find the next ready thread (starting from `current + 1` round-robin), mark current as `Ready` (if not `Finished`), mark next as `Running`, set `CURRENT_THREAD_ENTRY` if the next thread has an entry, then switch to it.
     fn schedule_next(&mut self) {
         let old_idx = self.current;
@@ -182,28 +177,24 @@ impl Scheduler {
         if self.threads[next_idx].state != ThreadState::Ready {
             return;
         }
-
         // Mark old thread as Ready if it hasn't finished
         if self.threads[old_idx].state != ThreadState::Finished {
             self.threads[old_idx].state = ThreadState::Ready;
         }
-
         // Switch to next thread
         self.threads[next_idx].state = ThreadState::Running;
         self.current = next_idx;
-
         // Set global entry pointer if this thread has entry (first run only)
         if let Some(entry_fn) = self.threads[next_idx].entry {
             unsafe {
                 CURRENT_THREAD_ENTRY = Some(entry_fn);
             }
         }
-
-        // Context switch old -> new
-        let old_ctx = &mut self.threads[old_idx].ctx;
-        let new_ctx = &self.threads[next_idx].ctx;
+        // ========= FIX: Use raw pointers to avoid borrow checker conflict =========
+        let old_ctx_ptr = &mut self.threads[old_idx].ctx as *mut TaskContext;
+        let new_ctx_ptr = &self.threads[next_idx].ctx as *const TaskContext;
         unsafe {
-            switch_context(old_ctx, new_ctx);
+            switch_context(old_ctx_ptr, new_ctx_ptr);
         }
     }
 }

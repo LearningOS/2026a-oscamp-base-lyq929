@@ -7,13 +7,12 @@
 //! ## Key Concepts
 //! - **Callee-saved registers**: Save and restore them on switch so the switched-away task can resume correctly later.
 //! - **Stack pointer `sp`** and **return address `ra`**: Restore them in the new context; the first time we switch to a task, `ret` jumps to `ra` (the entry point).
-//! - Inline assembly: `core::arch::asm!`
+//! - Inline assembly: `core::arch::naked_asm!`
 //!
 //! ## riscv64 ABI (for this exercise)
 //! - Callee-saved: `sp`, `ra`, `s0`–`s11`. The `ret` instruction is `jalr zero, 0(ra)`.
 //! - First and second arguments: `a0` (old context), `a1` (new context).
 #![cfg(target_arch = "riscv64")]
-#![feature(naked_functions)]
 
 /// Saved register state for one task (riscv64). Layout must match the offsets used in the asm below:
 /// `sp` at 0, `ra` at 8, then `s0`–`s11` at 16, 24, … 104.
@@ -71,9 +70,9 @@ impl TaskContext {
 ///
 /// Must be `#[unsafe(naked)]` to prevent the compiler from generating a prologue/epilogue.
 #[unsafe(naked)]
-pub unsafe fn switch_context(old: &mut TaskContext, new: &TaskContext) {
+pub unsafe extern "C" fn switch_context(old: &mut TaskContext, new: &TaskContext) {
     // a0 = old (*mut TaskContext), a1 = new (*const TaskContext)
-    core::arch::asm!(
+    core::arch::naked_asm!(
         // Save callee-saved registers to old context (a0)
         "sd sp, 0(a0)",
         "sd ra, 8(a0)",
@@ -89,7 +88,6 @@ pub unsafe fn switch_context(old: &mut TaskContext, new: &TaskContext) {
         "sd s9, 88(a0)",
         "sd s10, 96(a0)",
         "sd s11, 104(a0)",
-
         // Load registers from new context (a1)
         "ld sp, 0(a1)",
         "ld ra, 8(a1)",
@@ -105,11 +103,9 @@ pub unsafe fn switch_context(old: &mut TaskContext, new: &TaskContext) {
         "ld s9, 88(a1)",
         "ld s10, 96(a1)",
         "ld s11, 104(a1)",
-
         // Zero a0/a1 to avoid leaking raw pointers into new context
         "mv a0, zero",
         "mv a1, zero",
-
         // ret = jalr zero,0(ra)
         "ret",
         options(noreturn),
@@ -120,7 +116,7 @@ const STACK_SIZE: usize = 1024 * 64;
 /// Allocate a stack for a coroutine. Returns `(buffer, stack_top)` where `stack_top` is the high address
 /// (stack grows down). The buffer must be kept alive for the lifetime of the context using this stack.
 pub fn alloc_stack() -> (Vec<u8>, usize) {
-    let mut buf = vec![0u8; STACK_SIZE];
+    let buf = vec![0u8; STACK_SIZE];
     // stack grows downward: stack_top is at the end of buffer
     let stack_top = buf.as_ptr() as usize + STACK_SIZE;
     // RISC-V ABI requires stack 16-byte aligned at function entry
@@ -133,18 +129,21 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
     static COUNTER: AtomicU32 = AtomicU32::new(0);
+
     extern "C" fn task_entry() {
         COUNTER.store(42, Ordering::SeqCst);
         loop {
             std::hint::spin_loop();
         }
     }
+
     #[test]
     fn test_alloc_stack() {
         let (buf, top) = alloc_stack();
         assert_eq!(top, buf.as_ptr() as usize + STACK_SIZE);
         assert!(top % 16 == 0);
     }
+
     #[test]
     fn test_context_init() {
         let (buf, top) = alloc_stack();
@@ -155,21 +154,25 @@ mod tests {
         assert_eq!(ctx.ra, entry as u64);
         assert!(ctx.sp != 0);
     }
+
     #[test]
     fn test_switch_to_task() {
         COUNTER.store(0, Ordering::SeqCst);
         static mut MAIN_CTX_PTR: *mut TaskContext = std::ptr::null_mut();
         static mut TASK_CTX_PTR: *mut TaskContext = std::ptr::null_mut();
+
         extern "C" fn cooperative_task() {
             COUNTER.store(99, Ordering::SeqCst);
             unsafe {
                 switch_context(&mut *TASK_CTX_PTR, &*MAIN_CTX_PTR);
             }
         }
+
         let (_stack_buf, stack_top) = alloc_stack();
         let mut main_ctx = TaskContext::empty();
         let mut task_ctx = TaskContext::empty();
         task_ctx.init(stack_top, cooperative_task as *const () as usize);
+
         unsafe {
             MAIN_CTX_PTR = &mut main_ctx;
             TASK_CTX_PTR = &mut task_ctx;
