@@ -137,10 +137,9 @@ impl Sv39PageTable {
     ///    d. 否则用 PTE 中的 PPN 进入下一级页表
     /// 3. level 0 的 PTE 必须是叶节点
     pub fn translate(&self, va: u64) -> TranslateResult {
-        let offset = va & 0xFFF;
         let mut curr_ppn = self.root_ppn;
         let levels = [2, 1, 0];
-        for level in levels {
+        for &level in &levels {
             let vpn = Self::extract_vpn(va, level);
             let node = match self.nodes.get(&curr_ppn) {
                 Some(n) => n,
@@ -154,7 +153,21 @@ impl Sv39PageTable {
             let is_leaf = (pte & (PTE_R | PTE_W | PTE_X)) != 0;
             if is_leaf {
                 let ppn = pte >> PPN_SHIFT;
-                let pa = (ppn << 12) | offset;
+                let pa = match level {
+                    2 => {
+                        // Level2 1GB大页: ppn << 30 | va & 0x3FFFFFFF
+                        (ppn << 30) | (va & ((1u64 << 30) - 1))
+                    }
+                    1 => {
+                        // Level1 2MB大页: ppn << 21 | va & 0x1FFFFF
+                        (ppn << 21) | (va & ((1u64 << 21) - 1))
+                    }
+                    0 => {
+                        // Level0 4KB页: ppn <<12 | offset
+                        (ppn << 12) | (va & 0xFFF)
+                    }
+                    _ => unreachable!(),
+                };
                 return TranslateResult::Ok(pa);
             }
             // 非叶子，取下一级页表PPN
@@ -186,7 +199,6 @@ impl Sv39PageTable {
         }
         let pte = self.nodes.get(&curr_ppn).unwrap().entries[vpn2];
         curr_ppn = pte >> PPN_SHIFT;
-
         // level1 写入叶子PTE（大页）
         let vpn1 = Self::extract_vpn(va, 1);
         let node_l1 = self.nodes.get_mut(&curr_ppn).unwrap();
