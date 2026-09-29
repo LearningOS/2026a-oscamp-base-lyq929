@@ -2,8 +2,8 @@
   "schema": 1,
   "courseId": 2074,
   "repository": "LearningOS/2026a-oscamp-base-lyq929",
-  "commit": "d40b17233ba6207d6a8c85cb31b44b275be8d696",
-  "score": 86,
+  "commit": "c4c805014d97c9f65df0a111970acb0330ec427f",
+  "score": 96,
   "totalScore": 100,
   "exercises": [
     {
@@ -149,16 +149,16 @@
     {
       "name": "pte_flags",
       "max": 3,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 3,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "page_table_walk",
       "max": 4,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 4,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "multi_level_pt",
@@ -170,15 +170,15 @@
     {
       "name": "tlb_sim",
       "max": 3,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 3,
+      "status": "pass",
+      "exitCode": 0
     }
   ],
   "student": "lyq929",
-  "runId": "36593296869",
+  "runId": "36595191176",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
